@@ -100,6 +100,12 @@
 
   #help-hint{position:absolute;bottom:30px;left:0;right:0;text-align:center;color:var(--text-muted);font-size:11px;z-index:20;pointer-events:none;letter-spacing:.2px;}
 
+  .sync-dot{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%;z-index:27;cursor:pointer;}
+  .sync-loading{background:var(--text-muted);}
+  .sync-saved{background:var(--teal);}
+  .sync-saving{background:var(--gold);}
+  .sync-error{background:var(--danger);box-shadow:0 0 8px var(--danger);}
+
   #sheet-overlay, .ov{position:fixed;inset:0;background:rgba(6,8,16,0.55);z-index:42;display:none;}
   #sheet, .sheet-panel{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:18px 18px 24px;z-index:43;display:none;}
   #sheet .sheet-title, .sheet-panel h3{font-family:'Spectral',serif;font-size:17px;color:var(--text);margin:0 0 10px;}
@@ -157,6 +163,7 @@
 
   <div id="viewport">
     <div id="starfield"></div>
+    <div class="sync-dot sync-loading" id="syncDot" title="동기화 상태"></div>
     <div id="world">
       <svg id="edges-svg"></svg>
       <div id="nodes-layer"></div>
@@ -309,6 +316,16 @@
   function showBanner(text){ connectBanner.textContent = text; connectBanner.style.display = "block"; }
   function hideBanner(){ connectBanner.style.display = "none"; }
 
+  document.getElementById("syncDot").addEventListener("click", function(){
+    var msgs = {
+      loading: "별을 불러오는 중이에요",
+      saved: "모두 저장됐어요",
+      saving: "저장 중이에요…",
+      error: "저장에 문제가 있어요 — 새로고침하거나 네트워크를 확인해주세요"
+    };
+    toast(msgs[this.dataset.status] || "");
+  });
+
   function shade(hex, percent){
     var num = parseInt(hex.slice(1),16);
     var r = (num>>16) + Math.round(255*percent);
@@ -337,18 +354,54 @@
   }
 
   // ---------- Persistence ----------
+  function setSync(s){
+    var dot = document.getElementById("syncDot");
+    if(!dot) return;
+    dot.className = "sync-dot sync-" + s;
+    dot.dataset.status = s;
+  }
+
+  function applyLoadedData(res){
+    if(res && res.value){
+      try{
+        var data = JSON.parse(res.value);
+        if(data.nodes) state.nodes = data.nodes.map(migrateNode);
+        if(data.edges) state.edges = data.edges;
+        if(data.view) state.view = data.view;
+      }catch(e){ console.error("parse error", e); }
+    }
+  }
+
   function load(){
+    setSync("loading");
+    window.storage.list("", false).then(function(listRes){
+      var keys = (listRes && listRes.keys) || [];
+      attemptGet(keys.indexOf("board") > -1, 0);
+    }).catch(function(){
+      attemptGet(null, 0); // couldn't confirm existence; still try get() with retries
+    });
+  }
+
+  function attemptGet(existsKnown, retryCount){
     window.storage.get("board", false).then(function(res){
-      if(res && res.value){
-        try{
-          var data = JSON.parse(res.value);
-          if(data.nodes) state.nodes = data.nodes.map(migrateNode);
-          if(data.edges) state.edges = data.edges;
-          if(data.view) state.view = data.view;
-        }catch(e){ console.error("parse error", e); }
-      }
+      applyLoadedData(res);
       finishLoad();
-    }).catch(function(){ finishLoad(); });
+      setSync("saved");
+    }).catch(function(){
+      if(existsKnown === false){
+        // confirmed there's nothing saved yet — safe to start fresh
+        finishLoad();
+        setSync("saved");
+      } else if(retryCount < 3){
+        setTimeout(function(){ attemptGet(existsKnown, retryCount+1); }, 700);
+      } else {
+        // a save may exist but we can't fetch it right now — do NOT start an empty
+        // board, since saving from here would overwrite the real data.
+        loadingEl.textContent = "불러오지 못했어요. 새로고침 후 다시 시도해주세요.";
+        setSync("error");
+        toast("저장된 별을 불러오지 못했어요 — 새로고침해보세요");
+      }
+    });
   }
 
   function migrateNode(n){
@@ -372,10 +425,21 @@
   var saveTimer = null;
   function save(){
     if(!loaded) return;
+    setSync("saving");
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function(){
-      window.storage.set("board", JSON.stringify(state), false).catch(function(){ toast("저장에 실패했어요"); });
-    }, 250);
+    saveTimer = setTimeout(function(){ doSave(0); }, 300);
+  }
+  function doSave(retryCount){
+    window.storage.set("board", JSON.stringify(state), false).then(function(){
+      setSync("saved");
+    }).catch(function(){
+      if(retryCount < 2){
+        setTimeout(function(){ doSave(retryCount+1); }, 600);
+      } else {
+        setSync("error");
+        toast("저장에 실패했어요 — 네트워크를 확인해주세요");
+      }
+    });
   }
 
   // ---------- Rendering ----------
