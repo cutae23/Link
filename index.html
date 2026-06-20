@@ -71,10 +71,8 @@
   @media (prefers-reduced-motion: no-preference){ .sun-shape{animation-name:sun-pulse;animation-timing-function:ease-in-out;animation-iteration-count:infinite;} }
   @keyframes sun-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
 
-  .planet-ring{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;z-index:0;}
-  @media (prefers-reduced-motion: no-preference){ .planet-ring{animation-name:ring-spin;animation-timing-function:linear;animation-iteration-count:infinite;} }
-  @keyframes ring-spin{from{transform:translate(-50%,-50%) rotate(-18deg);}to{transform:translate(-50%,-50%) rotate(342deg);}}
   .planet-wrap{position:relative;display:flex;align-items:center;justify-content:center;}
+  @keyframes ring-spin-svg{from{transform:rotate(-18deg);}to{transform:rotate(342deg);}}
 
   #empty-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:var(--text-muted);pointer-events:none;width:260px;}
   #empty-hint .mark{font-family:'Spectral',serif;font-style:italic;font-size:20px;color:var(--gold);margin-bottom:6px;}
@@ -581,32 +579,72 @@
       sn.style.animationDelay = ((seed%4)/3).toFixed(2)+"s";
       wrap.appendChild(sn);
     } else {
-      // 고리 포함 전체 크기로 wrap 확장
+      // SVG로 행성+고리를 하나의 캔버스 안에 정확히 그림
       var ringW = Math.round(size * 1.85);
-      var ringH = Math.round(size * 0.5);
-      wrap.style.width = ringW + "px";
-      wrap.style.height = ringW + "px"; // 정사각형으로 여유 확보
+      var svgSize = ringW;
+      wrap.style.width = svgSize + "px";
+      wrap.style.height = svgSize + "px";
 
-      var ring = document.createElement("div");
-      ring.className = "planet-ring";
-      ring.style.width = ringW + "px";
-      ring.style.height = ringH + "px";
-      ring.style.border = "1.5px solid " + shade(color,0.3);
-      ring.style.opacity = "0.75";
-      ring.style.animationDuration = (22 + (seed%14)).toFixed(0)+"s";
+      var svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svg.setAttribute("width", svgSize);
+      svg.setAttribute("height", svgSize);
+      svg.setAttribute("viewBox","0 0 " + svgSize + " " + svgSize);
+      svg.style.overflow = "visible";
+      svg.style.display = "block";
 
-      var body = document.createElement("div");
-      body.style.width = size+"px"; body.style.height = size+"px";
-      body.style.borderRadius = "50%";
-      body.style.position = "absolute";
-      body.style.top = "50%"; body.style.left = "50%";
-      body.style.transform = "translate(-50%,-50%)";
-      body.style.zIndex = "1";
-      body.style.background = "radial-gradient(circle at 35% 30%, " + shade(color,0.3) + ", " + color + " 55%, " + shade(color,-0.3) + " 100%)";
-      body.style.boxShadow = "0 0 " + Math.round(size*0.6) + "px " + shade(color,-0.1);
+      var cx = svgSize/2, cy = svgSize/2;
+      var pr = size/2; // 행성 반지름
+      var rx = svgSize/2 - 1, ry = Math.round(size*0.22); // 고리 타원
 
-      wrap.appendChild(ring);
-      wrap.appendChild(body);
+      // 뒤쪽 고리 반 (행성 뒤)
+      var ringBack = document.createElementNS("http://www.w3.org/2000/svg","path");
+      var ringColor = shade(color, 0.35);
+      ringBack.setAttribute("d","M "+(cx-rx)+","+cy+" A "+rx+","+ry+" 0 0 1 "+(cx+rx)+","+cy);
+      ringBack.setAttribute("fill","none");
+      ringBack.setAttribute("stroke", ringColor);
+      ringBack.setAttribute("stroke-width","2.5");
+      ringBack.setAttribute("opacity","0.5");
+
+      // 행성 본체
+      var defs = document.createElementNS("http://www.w3.org/2000/svg","defs");
+      var grad = document.createElementNS("http://www.w3.org/2000/svg","radialGradient");
+      var gid = "pg"+seed;
+      grad.setAttribute("id", gid);
+      grad.setAttribute("cx","35%"); grad.setAttribute("cy","30%");
+      grad.setAttribute("r","65%");
+      var s1 = document.createElementNS("http://www.w3.org/2000/svg","stop");
+      s1.setAttribute("offset","0%"); s1.setAttribute("stop-color", shade(color,0.3));
+      var s2 = document.createElementNS("http://www.w3.org/2000/svg","stop");
+      s2.setAttribute("offset","55%"); s2.setAttribute("stop-color", color);
+      var s3 = document.createElementNS("http://www.w3.org/2000/svg","stop");
+      s3.setAttribute("offset","100%"); s3.setAttribute("stop-color", shade(color,-0.3));
+      grad.appendChild(s1); grad.appendChild(s2); grad.appendChild(s3);
+      defs.appendChild(grad);
+      svg.appendChild(defs);
+
+      var circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      circle.setAttribute("cx", cx); circle.setAttribute("cy", cy);
+      circle.setAttribute("r", pr);
+      circle.setAttribute("fill","url(#"+gid+")");
+
+      // 앞쪽 고리 반 (행성 앞)
+      var ringFront = document.createElementNS("http://www.w3.org/2000/svg","path");
+      ringFront.setAttribute("d","M "+(cx-rx)+","+cy+" A "+rx+","+ry+" 0 0 0 "+(cx+rx)+","+cy);
+      ringFront.setAttribute("fill","none");
+      ringFront.setAttribute("stroke", ringColor);
+      ringFront.setAttribute("stroke-width","2.5");
+      ringFront.setAttribute("opacity","0.85");
+
+      // 회전 애니메이션 (CSS)
+      svg.style.animationName = "ring-spin-svg";
+      svg.style.animationDuration = (22 + (seed%14)).toFixed(0)+"s";
+      svg.style.animationTimingFunction = "linear";
+      svg.style.animationIterationCount = "infinite";
+
+      svg.appendChild(ringBack);
+      svg.appendChild(circle);
+      svg.appendChild(ringFront);
+      wrap.appendChild(svg);
     }
     return wrap;
   }
