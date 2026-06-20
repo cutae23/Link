@@ -43,10 +43,10 @@
   @media (prefers-reduced-motion: no-preference){ .bgstar.twinkle{animation:bgtwinkle 5s ease-in-out infinite;} }
   @keyframes bgtwinkle{0%,100%{opacity:0.15;}50%{opacity:0.75;}}
 
-  #world{position:absolute;top:0;left:0;width:20000px;height:20000px;transform-origin:0 0;}
-  #edges-svg{position:absolute;top:0;left:0;width:20000px;height:20000px;pointer-events:none;}
+  #world{position:absolute;top:0;left:0;width:100000px;height:100000px;transform-origin:0 0;}
+  #edges-svg{position:absolute;top:0;left:0;width:100000px;height:100000px;pointer-events:none;}
   #edges-svg line{stroke:rgba(212,166,90,0.4);stroke-width:1.4;}
-  #nodes-layer{position:absolute;top:0;left:0;width:20000px;height:20000px;}
+  #nodes-layer{position:absolute;top:0;left:0;width:100000px;height:100000px;}
 
   .body-node{position:absolute;display:flex;flex-direction:column;align-items:center;cursor:pointer;user-select:none;transition:opacity .25s;width:148px;left:-74px;}
   .body-visual{position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -71,9 +71,10 @@
   @media (prefers-reduced-motion: no-preference){ .sun-shape{animation-name:sun-pulse;animation-timing-function:ease-in-out;animation-iteration-count:infinite;} }
   @keyframes sun-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
 
-  .planet-ring{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;}
+  .planet-ring{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;z-index:0;}
   @media (prefers-reduced-motion: no-preference){ .planet-ring{animation-name:ring-spin;animation-timing-function:linear;animation-iteration-count:infinite;} }
   @keyframes ring-spin{from{transform:translate(-50%,-50%) rotate(-18deg);}to{transform:translate(-50%,-50%) rotate(342deg);}}
+  .planet-wrap{position:relative;display:flex;align-items:center;justify-content:center;}
 
   #empty-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:var(--text-muted);pointer-events:none;width:260px;}
   #empty-hint .mark{font-family:'Spectral',serif;font-style:italic;font-size:20px;color:var(--gold);margin-bottom:6px;}
@@ -279,7 +280,7 @@
 (function(){
   "use strict";
 
-  var WORLD_SIZE = 20000;
+  var WORLD_SIZE = 100000;
   var CENTER = WORLD_SIZE/2;
 
   var TYPES = [
@@ -580,19 +581,30 @@
       sn.style.animationDelay = ((seed%4)/3).toFixed(2)+"s";
       wrap.appendChild(sn);
     } else {
+      // 고리 포함 전체 크기로 wrap 확장
+      var ringW = Math.round(size * 1.85);
+      var ringH = Math.round(size * 0.5);
+      wrap.style.width = ringW + "px";
+      wrap.style.height = ringW + "px"; // 정사각형으로 여유 확보
+
       var ring = document.createElement("div");
       ring.className = "planet-ring";
-      ring.style.width = (size*1.85)+"px";
-      ring.style.height = (size*0.5)+"px";
+      ring.style.width = ringW + "px";
+      ring.style.height = ringH + "px";
       ring.style.border = "1.5px solid " + shade(color,0.3);
       ring.style.opacity = "0.75";
       ring.style.animationDuration = (22 + (seed%14)).toFixed(0)+"s";
+
       var body = document.createElement("div");
       body.style.width = size+"px"; body.style.height = size+"px";
       body.style.borderRadius = "50%";
-      body.style.position = "relative";
+      body.style.position = "absolute";
+      body.style.top = "50%"; body.style.left = "50%";
+      body.style.transform = "translate(-50%,-50%)";
+      body.style.zIndex = "1";
       body.style.background = "radial-gradient(circle at 35% 30%, " + shade(color,0.3) + ", " + color + " 55%, " + shade(color,-0.3) + " 100%)";
       body.style.boxShadow = "0 0 " + Math.round(size*0.6) + "px " + shade(color,-0.1);
+
       wrap.appendChild(ring);
       wrap.appendChild(body);
     }
@@ -615,9 +627,10 @@
     state.nodes.forEach(function(node, idx){
       var deg = degreeOf(node.id);
       var size = sizeFor(node.type, deg);
+      var visualH = (node.type === "planet") ? Math.round(size * 1.85) : size;
       var el = document.createElement("div");
       el.className = "body-node";
-      el.style.top = (node.y - size/2) + "px";
+      el.style.top = (node.y - visualH/2) + "px";
       el.style.left = (node.x - 74) + "px";
       el.dataset.id = node.id;
 
@@ -1183,7 +1196,7 @@
   (function buildStarfield(){
     var field = document.getElementById("starfield");
     var frag = document.createDocumentFragment();
-    for(var i=0;i<90;i++){
+    for(var i=0;i<200;i++){
       var s = document.createElement("div");
       s.className = "bgstar" + (Math.random() < 0.3 ? " twinkle" : "");
       var size = Math.random()*2 + 0.5;
