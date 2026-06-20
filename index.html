@@ -106,6 +106,8 @@
   .sync-saving{background:var(--gold);}
   .sync-error{background:var(--danger);box-shadow:0 0 8px var(--danger);}
 
+  #storageWarning{position:absolute;top:0;left:0;right:0;background:rgba(199,92,92,0.18);border-bottom:1px solid var(--danger);color:#F1B8B8;font-size:11px;text-align:center;padding:6px 10px;z-index:28;display:none;}
+
   #sheet-overlay, .ov{position:fixed;inset:0;background:rgba(6,8,16,0.55);z-index:42;display:none;}
   #sheet, .sheet-panel{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:18px 18px 24px;z-index:43;display:none;}
   #sheet .sheet-title, .sheet-panel h3{font-family:'Spectral',serif;font-size:17px;color:var(--text);margin:0 0 10px;}
@@ -166,6 +168,7 @@
 
   <div id="viewport">
     <div id="starfield"></div>
+    <div id="storageWarning">⚠ 이 화면에서는 저장 기능을 쓸 수 없어요. 별은 지금 보는 동안만 유지돼요.</div>
     <div class="sync-dot sync-loading" id="syncDot" title="동기화 상태"></div>
     <div id="world">
       <svg id="edges-svg"></svg>
@@ -357,11 +360,21 @@
   }
 
   // ---------- Persistence ----------
+  var storageAvailable = true;
+
   function setSync(s){
     var dot = document.getElementById("syncDot");
     if(!dot) return;
     dot.className = "sync-dot sync-" + s;
     dot.dataset.status = s;
+  }
+
+  function noStorageFallback(){
+    storageAvailable = false;
+    setSync("error");
+    document.getElementById("storageWarning").style.display = "block";
+    document.getElementById("saveBtn").style.display = "none";
+    finishLoad();
   }
 
   function applyLoadedData(res){
@@ -376,6 +389,18 @@
   }
 
   function load(){
+    if(!window.storage || typeof window.storage.get !== "function"){
+      // give it one short moment in case it's injected slightly after script start
+      setTimeout(function(){
+        if(!window.storage || typeof window.storage.get !== "function"){
+          noStorageFallback();
+        } else {
+          setSync("loading");
+          attemptGet(0);
+        }
+      }, 400);
+      return;
+    }
     setSync("loading");
     attemptGet(0);
   }
@@ -386,13 +411,12 @@
       finishLoad();
       setSync("saved");
     }).catch(function(){
-      if(retryCount < 4){
-        setTimeout(function(){ attemptGet(retryCount+1); }, 500*(retryCount+1));
+      // A missing key always rejects too, so we can't tell "never saved"
+      // from "real error" — keep retries short so a brand-new board
+      // doesn't sit on a loading screen for seconds.
+      if(retryCount < 1){
+        setTimeout(function(){ attemptGet(retryCount+1); }, 350);
       } else {
-        // Either nothing was ever saved, or repeated fetches failed.
-        // We can't tell those apart, so we proceed with an empty board
-        // rather than blocking forever — but the dot stays visible so
-        // any ongoing problem is at least noticeable.
         finishLoad();
         setSync("saved");
       }
@@ -419,12 +443,13 @@
 
   var saveTimer = null;
   function save(){
-    if(!loaded) return;
+    if(!loaded || !storageAvailable) return;
     setSync("saving");
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function(){ doSave(0); }, 300);
   }
   function doSave(retryCount){
+    if(!storageAvailable) return;
     window.storage.set("board", JSON.stringify(state), false).then(function(){
       setSync("saved");
     }).catch(function(){
@@ -438,6 +463,7 @@
   }
 
   function manualSave(){
+    if(!storageAvailable){ toast("이 화면에서는 저장이 지원되지 않아요"); return; }
     if(!loaded){ toast("아직 불러오는 중이에요"); return; }
     clearTimeout(saveTimer);
     setSync("saving");
@@ -1138,7 +1164,12 @@
     field.appendChild(frag);
   })();
 
-  load();
+  try{
+    load();
+  }catch(e){
+    console.error("boot error", e);
+    noStorageFallback();
+  }
 })();
 </script>
 </body>
