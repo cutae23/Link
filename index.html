@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>링크 우주</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0E1A;
+    --bg-deep:#060810;
+    --surface:#131826;
+    --surface-hover:#1B2236;
+    --border:#252E45;
+    --text:#E8E6E0;
+    --text-muted:#7C8399;
+    --gold:#D4A65A;
+    --teal:#5EC9C0;
+    --danger:#C75C5C;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  header{position:relative;z-index:30;display:flex;align-items:center;gap:8px;padding:14px 14px 10px 16px;background:linear-gradient(to bottom, rgba(10,14,26,0.95), rgba(10,14,26,0.7));}
+  .brand{display:flex;flex-direction:column;flex-shrink:0;}
+  .brand h1{font-family:'Spectral',serif;font-size:19px;font-weight:600;color:var(--gold);margin:0;letter-spacing:0.3px;}
+  .brand span{font-size:10.5px;color:var(--text-muted);letter-spacing:0.2px;margin-top:1px;}
+  .search-wrap{flex:1;position:relative;min-width:0;}
+  .search-wrap input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:9px 14px 9px 34px;font-size:13.5px;font-family:'Inter',sans-serif;outline:none;}
+  .search-wrap input::placeholder{color:var(--text-muted);}
+  .search-wrap input:focus{border-color:var(--gold);}
+  .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--text-muted);}
+  .icon-btn{flex-shrink:0;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .icon-btn svg{width:16px;height:16px;stroke:var(--text-muted);}
+  .icon-btn:active{background:var(--surface-hover);}
+
+  #viewport{position:relative;flex:1;overflow:hidden;touch-action:none;cursor:grab;}
+  #viewport.panning{cursor:grabbing;}
+  #starfield{position:absolute;inset:0;pointer-events:none;}
+  .bgstar{position:absolute;border-radius:50%;background:#fff;}
+  @media (prefers-reduced-motion: no-preference){ .bgstar.twinkle{animation:bgtwinkle 5s ease-in-out infinite;} }
+  @keyframes bgtwinkle{0%,100%{opacity:0.15;}50%{opacity:0.75;}}
+
+  #world{position:absolute;top:0;left:0;width:20000px;height:20000px;transform-origin:0 0;}
+  #edges-svg{position:absolute;top:0;left:0;width:20000px;height:20000px;pointer-events:none;}
+  #edges-svg line{stroke:rgba(212,166,90,0.4);stroke-width:1.4;}
+  #nodes-layer{position:absolute;top:0;left:0;width:20000px;height:20000px;}
+
+  .body-node{position:absolute;display:flex;flex-direction:column;align-items:center;cursor:pointer;user-select:none;transition:opacity .25s;width:148px;left:-74px;}
+  .body-visual{position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .body-card{margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:6px 10px;max-width:148px;text-align:center;pointer-events:none;}
+  .body-card .title{font-size:12.5px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .body-card .domain{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .body-node.dim{opacity:0.15;}
+  .body-node.match .body-visual{filter:drop-shadow(0 0 6px rgba(212,166,90,0.8));}
+  .body-node.connecting-src .body-visual{filter:drop-shadow(0 0 8px var(--teal));}
+  .body-node.selected-pick .body-visual{filter:drop-shadow(0 0 8px var(--teal));}
+  .pick-badge{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--teal);color:#06150f;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+
+  .star-shape{clip-path:polygon(50% 0%,61% 35%,100% 50%,61% 65%,50% 100%,39% 65%,0% 50%,39% 35%);}
+  @media (prefers-reduced-motion: no-preference){ .star-shape{animation-name:twinkle-pulse;animation-timing-function:ease-in-out;animation-iteration-count:infinite;} }
+  @keyframes twinkle-pulse{0%,100%{opacity:.65;transform:scale(.88);}50%{opacity:1;transform:scale(1.12);}}
+
+  .moon-shape{border-radius:50%;}
+  @media (prefers-reduced-motion: no-preference){ .moon-shape{animation-name:moon-breathe;animation-timing-function:ease-in-out;animation-iteration-count:infinite;} }
+  @keyframes moon-breathe{0%,100%{filter:brightness(1);}50%{filter:brightness(1.35);}}
+
+  .sun-shape{border-radius:50%;}
+  @media (prefers-reduced-motion: no-preference){ .sun-shape{animation-name:sun-pulse;animation-timing-function:ease-in-out;animation-iteration-count:infinite;} }
+  @keyframes sun-pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.07);}}
+
+  .planet-ring{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;}
+  @media (prefers-reduced-motion: no-preference){ .planet-ring{animation-name:ring-spin;animation-timing-function:linear;animation-iteration-count:infinite;} }
+  @keyframes ring-spin{from{transform:translate(-50%,-50%) rotate(-18deg);}to{transform:translate(-50%,-50%) rotate(342deg);}}
+
+  #empty-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:var(--text-muted);pointer-events:none;width:260px;}
+  #empty-hint .mark{font-family:'Spectral',serif;font-style:italic;font-size:20px;color:var(--gold);margin-bottom:6px;}
+  #empty-hint p{font-size:13px;margin:0;line-height:1.5;}
+
+  #connect-banner{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:25;background:var(--surface);border:1px solid var(--teal);color:var(--teal);padding:8px 16px;border-radius:20px;font-size:12.5px;display:none;text-align:center;max-width:80%;}
+
+  #fab{position:absolute;right:18px;bottom:24px;width:54px;height:54px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(212,166,90,0.4);cursor:pointer;z-index:25;border:none;}
+  #fab svg{width:24px;height:24px;stroke:#1A1306;stroke-width:2.4;}
+
+  #zoom-controls{position:absolute;left:14px;bottom:24px;display:flex;flex-direction:column;gap:6px;z-index:25;}
+  #zoom-controls button{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+
+  #selectBar{position:absolute;left:14px;right:14px;bottom:24px;background:var(--surface);border:1px solid var(--teal);border-radius:16px;padding:10px 14px;display:none;align-items:center;justify-content:space-between;z-index:26;gap:10px;}
+  #selectBar span{font-size:12.5px;color:var(--text);flex-shrink:0;}
+  #selectBar .sb-actions{display:flex;gap:8px;}
+  #selectBar button{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg-deep);color:var(--text);font-size:12.5px;cursor:pointer;}
+  #selectBar button.primary{background:var(--teal);color:#06150f;border-color:var(--teal);font-weight:600;}
+
+  #legend{position:absolute;left:14px;top:70px;display:flex;gap:6px;flex-wrap:wrap;max-width:70%;z-index:25;}
+  .chip{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:5px 10px;font-size:11.5px;color:var(--text-muted);cursor:pointer;}
+  .chip.active{border-color:var(--gold);color:var(--text);}
+  .chip .mini{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+
+  #help-hint{position:absolute;bottom:30px;left:0;right:0;text-align:center;color:var(--text-muted);font-size:11px;z-index:20;pointer-events:none;letter-spacing:.2px;}
+
+  #sheet-overlay, .ov{position:fixed;inset:0;background:rgba(6,8,16,0.55);z-index:42;display:none;}
+  #sheet, .sheet-panel{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:18px 18px 24px;z-index:43;display:none;}
+  #sheet .sheet-title, .sheet-panel h3{font-family:'Spectral',serif;font-size:17px;color:var(--text);margin:0 0 10px;}
+  #sheet .sheet-url{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-muted);word-break:break-all;margin-bottom:4px;}
+  #sheet .sheet-note{font-size:12.5px;color:var(--text-muted);margin:6px 0 0;}
+  #sheet .sheet-actions, .sheet-panel .sheet-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+  .sheet-btn{flex:1;min-width:70px;padding:11px 8px;border-radius:10px;border:1px solid var(--border);background:var(--bg-deep);color:var(--text);font-size:12.5px;text-align:center;cursor:pointer;}
+  .sheet-btn.primary{background:var(--gold);color:#1A1306;border-color:var(--gold);font-weight:600;}
+  .sheet-btn.danger{color:var(--danger);border-color:rgba(199,92,92,0.4);}
+  .sheet-option{display:flex;align-items:center;gap:10px;padding:13px 10px;border-radius:12px;background:var(--bg-deep);border:1px solid var(--border);margin-bottom:8px;cursor:pointer;font-size:13.5px;}
+  .sheet-option .em{font-size:18px;}
+  .sheet-cancel{width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:13px;margin-top:4px;cursor:pointer;text-align:center;}
+  .sheet-desc{font-size:12px;color:var(--text-muted);margin:0 0 10px;line-height:1.5;}
+  .code-box{width:100%;background:var(--bg-deep);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:10px;resize:none;height:90px;word-break:break-all;}
+
+  #modal-overlay{position:fixed;inset:0;background:rgba(6,8,16,0.65);z-index:50;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;}
+  #modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:380px;padding:20px;margin:auto;}
+  #modal h2{font-family:'Spectral',serif;font-size:18px;margin:0 0 14px;color:var(--text);}
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:11.5px;color:var(--text-muted);margin-bottom:5px;}
+  .field input, .field textarea{width:100%;background:var(--bg-deep);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px 11px;font-size:13.5px;font-family:'Inter',sans-serif;outline:none;resize:none;}
+  .field input:focus, .field textarea:focus{border-color:var(--gold);}
+  .type-row{display:flex;gap:7px;}
+  .type-pill{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 4px;border-radius:12px;border:1px solid var(--border);cursor:pointer;background:var(--bg-deep);}
+  .type-pill.selected{border-color:var(--gold);background:rgba(212,166,90,0.08);}
+  .type-pill .mini{width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+  .type-pill span{font-size:11px;color:var(--text-muted);}
+  .type-pill.selected span{color:var(--text);}
+  .swatches{display:flex;gap:7px;}
+  .swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+  .swatch.selected{border-color:var(--text);}
+  .modal-actions{display:flex;gap:8px;margin-top:16px;}
+  .modal-actions button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg-deep);color:var(--text);font-size:13px;cursor:pointer;}
+  .modal-actions button.primary{background:var(--gold);color:#1A1306;border-color:var(--gold);font-weight:600;}
+
+  #toast{position:absolute;top:64px;right:14px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:10px;font-size:12px;z-index:60;display:none;max-width:60%;}
+  #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-muted);font-size:13px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><h1>링크 우주</h1><span>나만의 링크 별자리</span></div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search" type="text" placeholder="제목, URL, 유형 검색">
+    </div>
+    <div class="icon-btn" id="shareHubBtn" title="별 보내기 / 받기">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </div>
+    <div class="icon-btn" id="resetBtn" title="초기화">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <div id="starfield"></div>
+    <div id="world">
+      <svg id="edges-svg"></svg>
+      <div id="nodes-layer"></div>
+    </div>
+    <div id="empty-hint">
+      <div class="mark">✦</div>
+      <p>아직 천체가 없어요.<br>별 · 달 · 해 · 행성으로<br>나만의 우주를 채워보세요.</p>
+    </div>
+    <div id="connect-banner"></div>
+    <div id="legend"></div>
+    <div id="zoom-controls">
+      <button id="zoomIn">+</button>
+      <button id="zoomOut">–</button>
+    </div>
+    <div id="selectBar">
+      <span id="selectCount">0개 선택됨</span>
+      <div class="sb-actions">
+        <button id="selectCancelBtn">취소</button>
+        <button id="selectSendBtn" class="primary">전송</button>
+      </div>
+    </div>
+    <div id="help-hint">탭하면 링크가 열려요 · 꾹 누르면 수정 메뉴가 나와요</div>
+    <button id="fab" title="천체 추가">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div id="loading">불러오는 중…</div>
+  </div>
+</div>
+
+<div id="sheet-overlay"></div>
+<div id="sheet">
+  <div class="sheet-title" id="sheetTitle"></div>
+  <div class="sheet-url" id="sheetUrl"></div>
+  <div class="sheet-note" id="sheetNote"></div>
+  <div class="sheet-actions">
+    <div class="sheet-btn primary" id="sheetOpen">열기</div>
+    <div class="sheet-btn" id="sheetEdit">수정</div>
+    <div class="sheet-btn" id="sheetConnect">연결</div>
+    <div class="sheet-btn danger" id="sheetDelete">삭제</div>
+  </div>
+</div>
+
+<div class="ov" id="hubSheetOv"></div>
+<div class="sheet-panel" id="hubSheet">
+  <h3>별 보내기 / 받기</h3>
+  <div class="sheet-option" id="hubSendOption"><span class="em">📤</span>&nbsp; 별 보내기 — 선택한 별을 코드로 만들어요</div>
+  <div class="sheet-option" id="hubReceiveOption"><span class="em">📥</span>&nbsp; 별 받기 — 친구가 보낸 코드를 붙여넣어요</div>
+  <div class="sheet-cancel" id="hubCancel">취소</div>
+</div>
+
+<div class="ov" id="importSheetOv"></div>
+<div class="sheet-panel" id="importSheet">
+  <h3>별 받기</h3>
+  <p class="sheet-desc">친구가 보내준 코드를 붙여넣으면 그 별들이 내 우주에 도착해요.</p>
+  <textarea class="code-box" id="importInput" placeholder="여기에 코드를 붙여넣어주세요"></textarea>
+  <div class="sheet-actions">
+    <div class="sheet-btn" id="importCancel">취소</div>
+    <div class="sheet-btn primary" id="importConfirm">가져오기</div>
+  </div>
+</div>
+
+<div class="ov" id="sendSheetOv"></div>
+<div class="sheet-panel" id="sendSheet">
+  <h3 id="sendSheetTitle">별 보내기</h3>
+  <p class="sheet-desc">이 코드를 친구에게 보내주세요. 내 우주의 별은 그대로 남고, 친구의 우주에 복사돼요.</p>
+  <textarea class="code-box" id="sendOutput" readonly></textarea>
+  <div class="sheet-actions">
+    <div class="sheet-btn" id="sendShareBtn">공유하기</div>
+    <div class="sheet-btn" id="sendCopyBtn">복사</div>
+    <div class="sheet-btn primary" id="sendDoneBtn">닫기</div>
+  </div>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal">
+    <h2 id="modalHeading">새 천체</h2>
+    <div class="field">
+      <label>유형</label>
+      <div class="type-row" id="typeRow"></div>
+    </div>
+    <div class="field">
+      <label>색상</label>
+      <div class="swatches" id="swatchRow"></div>
+    </div>
+    <div class="field">
+      <label>제목</label>
+      <input id="f-title" type="text" placeholder="예: 헤이그 협약 전문">
+    </div>
+    <div class="field">
+      <label>URL</label>
+      <input id="f-url" type="text" placeholder="example.com/page">
+    </div>
+    <div class="field">
+      <label>메모 (선택)</label>
+      <textarea id="f-note" rows="2" placeholder="이 링크에 대한 짧은 메모"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button id="modalCancel">취소</button>
+      <button id="modalSave" class="primary">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var WORLD_SIZE = 20000;
+  var CENTER = WORLD_SIZE/2;
+
+  var TYPES = [
+    {id:"star",   label:"별",  defaultColor:"#D4A65A"},
+    {id:"moon",   label:"달",  defaultColor:"#CBD0DE"},
+    {id:"sun",    label:"해",  defaultColor:"#E8954A"},
+    {id:"planet", label:"행성", defaultColor:"#6FB7C9"}
+  ];
+  var SWATCHES = ["#D4A65A","#5EC9C0","#9A8FD4","#7FA888","#C75C5C","#E0B6D9","#E8954A","#CBD0DE"];
+
+  var state = { nodes: [], edges: [], view: {x:0, y:0, scale:1} };
+  var loaded = false;
+  var activeFilterType = null;
+  var connectingFrom = null;
+  var editingId = null;
+  var selectMode = false;
+  var selectedIds = new Set();
+
+  var viewport = document.getElementById("viewport");
+  var world = document.getElementById("world");
+  var nodesLayer = document.getElementById("nodes-layer");
+  var edgesSvg = document.getElementById("edges-svg");
+  var emptyHint = document.getElementById("empty-hint");
+  var connectBanner = document.getElementById("connect-banner");
+  var legendEl = document.getElementById("legend");
+  var loadingEl = document.getElementById("loading");
+  var toastEl = document.getElementById("toast");
+
+  function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+  function typeOf(id){ for(var i=0;i<TYPES.length;i++) if(TYPES[i].id===id) return TYPES[i]; return TYPES[0]; }
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.style.display = "block";
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(function(){ toastEl.style.display = "none"; }, 2400);
+  }
+
+  function showBanner(text){ connectBanner.textContent = text; connectBanner.style.display = "block"; }
+  function hideBanner(){ connectBanner.style.display = "none"; }
+
+  function shade(hex, percent){
+    var num = parseInt(hex.slice(1),16);
+    var r = (num>>16) + Math.round(255*percent);
+    var g = ((num>>8)&0x00FF) + Math.round(255*percent);
+    var b = (num&0x0000FF) + Math.round(255*percent);
+    r = clamp(r,0,255); g = clamp(g,0,255); b = clamp(b,0,255);
+    return "rgb(" + r + "," + g + "," + b + ")";
+  }
+
+  function applyTransform(){
+    world.style.transform = "translate(" + state.view.x + "px," + state.view.y + "px) scale(" + state.view.scale + ")";
+  }
+
+  // ---------- Base64 helpers (unicode-safe) ----------
+  function toBase64(str){
+    var bytes = new TextEncoder().encode(str);
+    var binary = "";
+    for(var i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+  function fromBase64(b64){
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for(var i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  // ---------- Persistence ----------
+  function load(){
+    window.storage.get("board", false).then(function(res){
+      if(res && res.value){
+        try{
+          var data = JSON.parse(res.value);
+          if(data.nodes) state.nodes = data.nodes.map(migrateNode);
+          if(data.edges) state.edges = data.edges;
+          if(data.view) state.view = data.view;
+        }catch(e){ console.error("parse error", e); }
+      }
+      finishLoad();
+    }).catch(function(){ finishLoad(); });
+  }
+
+  function migrateNode(n){
+    if(!n.type){ n.type = "star"; if(!n.color) n.color = "#D4A65A"; }
+    if(!n.color) n.color = typeOf(n.type).defaultColor;
+    return n;
+  }
+
+  function finishLoad(){
+    loaded = true;
+    loadingEl.style.display = "none";
+    if(!state.view.x && !state.view.y){
+      var r = viewport.getBoundingClientRect();
+      state.view.x = r.width/2 - CENTER;
+      state.view.y = r.height/2 - CENTER;
+    }
+    applyTransform();
+    renderAll();
+  }
+
+  var saveTimer = null;
+  function save(){
+    if(!loaded) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){
+      window.storage.set("board", JSON.stringify(state), false).catch(function(){ toast("저장에 실패했어요"); });
+    }, 250);
+  }
+
+  // ---------- Rendering ----------
+  function renderAll(){
+    renderLegend();
+    renderEdges();
+    renderNodes();
+    emptyHint.style.display = state.nodes.length === 0 ? "block" : "none";
+  }
+
+  function degreeOf(nodeId){
+    var c = 0;
+    for(var i=0;i<state.edges.length;i++) if(state.edges[i].from===nodeId || state.edges[i].to===nodeId) c++;
+    return c;
+  }
+
+  function domainOf(url){
+    try{ return new URL(url).hostname.replace(/^www\./,""); }
+    catch(e){ return url; }
+  }
+
+  function matchesSearch(node, q){
+    if(!q) return true;
+    q = q.toLowerCase();
+    var t = typeOf(node.type);
+    return (node.title||"").toLowerCase().indexOf(q) > -1 ||
+           (node.url||"").toLowerCase().indexOf(q) > -1 ||
+           t.label.toLowerCase().indexOf(q) > -1;
+  }
+
+  function sizeFor(type, deg){
+    var bonus = Math.min(deg*1.5, 10);
+    if(type==="sun") return clamp(32+bonus,32,46);
+    if(type==="planet") return clamp(24+bonus,24,36);
+    if(type==="moon") return clamp(20+bonus,20,32);
+    return clamp(15+bonus,15,30);
+  }
+
+  function buildVisual(type, size, color, seed){
+    var wrap = document.createElement("div");
+    wrap.className = "body-visual";
+    wrap.style.width = size + "px";
+    wrap.style.height = size + "px";
+
+    if(type === "star"){
+      var s = document.createElement("div");
+      s.className = "star-shape";
+      s.style.width = size+"px"; s.style.height = size+"px";
+      s.style.background = color;
+      s.style.boxShadow = "0 0 " + Math.round(size*0.9) + "px " + color;
+      s.style.animationDuration = (1.6 + (seed%10)/8).toFixed(2)+"s";
+      s.style.animationDelay = ((seed%7)/3).toFixed(2)+"s";
+      wrap.appendChild(s);
+    } else if(type === "moon"){
+      var m = document.createElement("div");
+      m.className = "moon-shape";
+      m.style.width = size+"px"; m.style.height = size+"px";
+      m.style.background = color;
+      m.style.boxShadow = "inset " + Math.round(size*0.3) + "px " + Math.round(-size*0.15) + "px 0 0 #0A0E1A, 0 0 " + Math.round(size*0.7) + "px " + color;
+      m.style.animationDuration = (3.4 + (seed%6)/3).toFixed(2)+"s";
+      m.style.animationDelay = ((seed%5)/4).toFixed(2)+"s";
+      wrap.appendChild(m);
+    } else if(type === "sun"){
+      var sn = document.createElement("div");
+      sn.className = "sun-shape";
+      sn.style.width = size+"px"; sn.style.height = size+"px";
+      sn.style.background = "radial-gradient(circle at 35% 30%, " + shade(color,0.35) + ", " + color + " 55%, " + shade(color,-0.25) + " 100%)";
+      sn.style.boxShadow = "0 0 " + Math.round(size*1.3) + "px " + color + ", 0 0 " + Math.round(size*2.2) + "px " + shade(color,-0.1);
+      sn.style.animationDuration = (2.2 + (seed%6)/4).toFixed(2)+"s";
+      sn.style.animationDelay = ((seed%4)/3).toFixed(2)+"s";
+      wrap.appendChild(sn);
+    } else {
+      var ring = document.createElement("div");
+      ring.className = "planet-ring";
+      ring.style.width = (size*1.85)+"px";
+      ring.style.height = (size*0.5)+"px";
+      ring.style.border = "1.5px solid " + shade(color,0.3);
+      ring.style.opacity = "0.75";
+      ring.style.animationDuration = (22 + (seed%14)).toFixed(0)+"s";
+      var body = document.createElement("div");
+      body.style.width = size+"px"; body.style.height = size+"px";
+      body.style.borderRadius = "50%";
+      body.style.position = "relative";
+      body.style.background = "radial-gradient(circle at 35% 30%, " + shade(color,0.3) + ", " + color + " 55%, " + shade(color,-0.3) + " 100%)";
+      body.style.boxShadow = "0 0 " + Math.round(size*0.6) + "px " + shade(color,-0.1);
+      wrap.appendChild(ring);
+      wrap.appendChild(body);
+    }
+    return wrap;
+  }
+
+  function miniIcon(type, color){
+    var box = document.createElement("div");
+    box.className = "mini";
+    var inner = buildVisual(type, 14, color || typeOf(type).defaultColor, 1);
+    var animated = inner.querySelector(".star-shape,.moon-shape,.sun-shape,.planet-ring");
+    if(animated) animated.style.animation = "none";
+    box.appendChild(inner);
+    return box;
+  }
+
+  function renderNodes(){
+    nodesLayer.innerHTML = "";
+    var q = document.getElementById("search").value.trim();
+    state.nodes.forEach(function(node, idx){
+      var deg = degreeOf(node.id);
+      var size = sizeFor(node.type, deg);
+      var el = document.createElement("div");
+      el.className = "body-node";
+      el.style.top = (node.y - size/2) + "px";
+      el.style.left = (node.x - 74) + "px";
+      el.dataset.id = node.id;
+
+      var show = matchesSearch(node, q) && (!activeFilterType || node.type === activeFilterType);
+      if((q || activeFilterType) && !show) el.classList.add("dim");
+      else if(q) el.classList.add("match");
+      if(connectingFrom === node.id) el.classList.add("connecting-src");
+      if(selectMode && selectedIds.has(node.id)) el.classList.add("selected-pick");
+
+      var visualHolder = document.createElement("div");
+      visualHolder.style.position = "relative";
+      var visual = buildVisual(node.type, size, node.color, idx+1);
+      visualHolder.appendChild(visual);
+      if(selectMode && selectedIds.has(node.id)){
+        var badge = document.createElement("div");
+        badge.className = "pick-badge";
+        badge.textContent = "✓";
+        visualHolder.appendChild(badge);
+      }
+
+      var card = document.createElement("div");
+      card.className = "body-card";
+      var t = document.createElement("div"); t.className="title"; t.textContent = node.title;
+      var d = document.createElement("div"); d.className="domain"; d.textContent = domainOf(node.url);
+      card.appendChild(t); card.appendChild(d);
+
+      el.appendChild(visualHolder);
+      el.appendChild(card);
+      nodesLayer.appendChild(el);
+      attachNodeEvents(el, node.id);
+    });
+  }
+
+  function renderEdges(){
+    edgesSvg.innerHTML = "";
+    state.edges.forEach(function(edge){
+      var from = state.nodes.find(function(n){return n.id===edge.from;});
+      var to = state.nodes.find(function(n){return n.id===edge.to;});
+      if(!from || !to) return;
+      var line = document.createElementNS("http://www.w3.org/2000/svg","line");
+      line.setAttribute("x1", from.x); line.setAttribute("y1", from.y);
+      line.setAttribute("x2", to.x); line.setAttribute("y2", to.y);
+      line.dataset.from = edge.from; line.dataset.to = edge.to;
+      edgesSvg.appendChild(line);
+    });
+  }
+
+  function updateEdgesFor(nodeId, x, y){
+    var lines = edgesSvg.querySelectorAll("line");
+    lines.forEach(function(line){
+      if(line.dataset.from === nodeId){ line.setAttribute("x1", x); line.setAttribute("y1", y); }
+      if(line.dataset.to === nodeId){ line.setAttribute("x2", x); line.setAttribute("y2", y); }
+    });
+  }
+
+  function renderLegend(){
+    legendEl.innerHTML = "";
+    TYPES.forEach(function(t){
+      var count = state.nodes.filter(function(n){return n.type===t.id;}).length;
+      if(count === 0 && activeFilterType !== t.id) return;
+      var chip = document.createElement("div");
+      chip.className = "chip" + (activeFilterType===t.id ? " active" : "");
+      chip.appendChild(miniIcon(t.id, t.defaultColor));
+      chip.appendChild(document.createTextNode(t.label + " " + count));
+      chip.onclick = function(){
+        activeFilterType = (activeFilterType === t.id) ? null : t.id;
+        renderAll();
+      };
+      legendEl.appendChild(chip);
+    });
+  }
+
+  // ---------- Node interaction ----------
+  function attachNodeEvents(el, nodeId){
+    var dragging=false, moved=false, startX,startY, origX,origY, pid=null, longPressTimer=null, longPressFired=false;
+
+    el.addEventListener("pointerdown", function(e){
+      e.stopPropagation();
+      if(selectMode){
+        pid = e.pointerId; startX = e.clientX; startY = e.clientY;
+        try{ el.setPointerCapture(pid); }catch(err){}
+        return;
+      }
+      if(connectingFrom){ return; }
+      var node = state.nodes.find(function(n){return n.id===nodeId;});
+      if(!node) return;
+      dragging = true; moved = false; longPressFired = false;
+      startX = e.clientX; startY = e.clientY;
+      origX = node.x; origY = node.y;
+      pid = e.pointerId;
+      try{ el.setPointerCapture(pid); }catch(err){}
+      longPressTimer = setTimeout(function(){
+        if(!moved){
+          longPressFired = true;
+          dragging = false;
+          try{ el.releasePointerCapture(pid); }catch(err){}
+          openSheet(nodeId);
+        }
+      }, 480);
+    });
+
+    el.addEventListener("pointermove", function(e){
+      if(selectMode || connectingFrom || !dragging) return;
+      var dx = (e.clientX - startX) / state.view.scale;
+      var dy = (e.clientY - startY) / state.view.scale;
+      if(Math.abs(dx) > 4 || Math.abs(dy) > 4){
+        if(!moved){ clearTimeout(longPressTimer); }
+        moved = true;
+      }
+      if(!moved) return;
+      var node = state.nodes.find(function(n){return n.id===nodeId;});
+      node.x = clamp(origX + dx, 40, WORLD_SIZE-40);
+      node.y = clamp(origY + dy, 40, WORLD_SIZE-40);
+      el.style.left = (node.x - 74) + "px";
+      var size = sizeFor(node.type, degreeOf(nodeId));
+      el.style.top = (node.y - size/2) + "px";
+      updateEdgesFor(nodeId, node.x, node.y);
+    });
+
+    el.addEventListener("pointerup", function(e){
+      e.stopPropagation();
+      if(selectMode){
+        try{ el.releasePointerCapture(pid); }catch(err){}
+        var ddx = Math.abs(e.clientX-startX), ddy = Math.abs(e.clientY-startY);
+        if(ddx < 6 && ddy < 6) toggleSelect(nodeId);
+        return;
+      }
+      clearTimeout(longPressTimer);
+      if(pid !== null){ try{ el.releasePointerCapture(pid); }catch(err){} }
+      if(connectingFrom){ handleConnectTap(nodeId); return; }
+      if(longPressFired){ longPressFired = false; dragging = false; return; }
+      if(dragging && !moved){
+        var node = state.nodes.find(function(n){return n.id===nodeId;});
+        dragging = false;
+        if(node) window.open(node.url, "_blank");
+      } else if(moved){
+        dragging = false;
+        save();
+        renderEdges();
+      }
+    });
+
+    el.addEventListener("pointercancel", function(){
+      clearTimeout(longPressTimer);
+      dragging = false;
+    });
+  }
+
+  function handleConnectTap(nodeId){
+    if(connectingFrom === nodeId){ cancelConnect(); return; }
+    var exists = state.edges.some(function(ed){
+      return (ed.from===connectingFrom && ed.to===nodeId) || (ed.from===nodeId && ed.to===connectingFrom);
+    });
+    if(!exists){
+      state.edges.push({id:uid(), from:connectingFrom, to:nodeId});
+      toast("연결됐어요");
+      save();
+    }
+    cancelConnect();
+    renderAll();
+  }
+
+  function cancelConnect(){
+    connectingFrom = null;
+    hideBanner();
+    renderNodes();
+  }
+
+  // ---------- Select mode ----------
+  function enterSelectMode(){
+    if(connectingFrom) cancelConnect();
+    selectMode = true;
+    selectedIds = new Set();
+    document.getElementById("fab").style.display = "none";
+    document.getElementById("zoom-controls").style.display = "none";
+    document.getElementById("selectBar").style.display = "flex";
+    showBanner("보낼 천체를 탭해서 선택하세요");
+    updateSelectBar();
+    renderNodes();
+  }
+  function exitSelectMode(){
+    selectMode = false;
+    selectedIds = new Set();
+    document.getElementById("fab").style.display = "flex";
+    document.getElementById("zoom-controls").style.display = "flex";
+    document.getElementById("selectBar").style.display = "none";
+    hideBanner();
+    renderNodes();
+  }
+  function toggleSelect(nodeId){
+    if(selectedIds.has(nodeId)) selectedIds.delete(nodeId);
+    else selectedIds.add(nodeId);
+    updateSelectBar();
+    renderNodes();
+  }
+  function updateSelectBar(){
+    var n = selectedIds.size;
+    document.getElementById("selectCount").textContent = n + "개 선택됨";
+    var btn = document.getElementById("selectSendBtn");
+    btn.style.opacity = n===0 ? "0.45" : "1";
+    btn.style.pointerEvents = n===0 ? "none" : "auto";
+  }
+  document.getElementById("selectCancelBtn").onclick = exitSelectMode;
+  document.getElementById("selectSendBtn").onclick = function(){
+    if(selectedIds.size===0) return;
+    openSendSheet(Array.from(selectedIds));
+  };
+
+  // ---------- Pan / Zoom ----------
+  var pointers = {};
+  var panning=false, panStart={x:0,y:0}, panOrigin={x:0,y:0};
+  var pinchStartDist=0, pinchStartScale=1;
+
+  viewport.addEventListener("pointerdown", function(e){
+    pointers[e.pointerId] = {x:e.clientX, y:e.clientY};
+    var ids = Object.keys(pointers);
+    if(ids.length === 1){
+      if(connectingFrom){ cancelConnect(); return; }
+      panning = true;
+      viewport.classList.add("panning");
+      panStart = {x:e.clientX, y:e.clientY};
+      panOrigin = {x:state.view.x, y:state.view.y};
+    } else if(ids.length === 2){
+      panning = false;
+      viewport.classList.remove("panning");
+      var p = Object.values(pointers);
+      pinchStartDist = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      pinchStartScale = state.view.scale;
+    }
+  });
+
+  viewport.addEventListener("pointermove", function(e){
+    if(!(e.pointerId in pointers)) return;
+    pointers[e.pointerId] = {x:e.clientX, y:e.clientY};
+    var ids = Object.keys(pointers);
+    if(ids.length === 2){
+      var p = Object.values(pointers);
+      var dist = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      var ratio = dist / (pinchStartDist || 1);
+      var newScale = clamp(pinchStartScale * ratio, 0.3, 2.5);
+      var mx = (p[0].x+p[1].x)/2, my = (p[0].y+p[1].y)/2;
+      var rect = viewport.getBoundingClientRect();
+      var wx = (mx-rect.left - state.view.x)/state.view.scale;
+      var wy = (my-rect.top - state.view.y)/state.view.scale;
+      state.view.scale = newScale;
+      state.view.x = (mx-rect.left) - wx*newScale;
+      state.view.y = (my-rect.top) - wy*newScale;
+      applyTransform();
+    } else if(ids.length === 1 && panning){
+      state.view.x = panOrigin.x + (e.clientX - panStart.x);
+      state.view.y = panOrigin.y + (e.clientY - panStart.y);
+      applyTransform();
+    }
+  });
+
+  function endPointer(e){
+    delete pointers[e.pointerId];
+    if(Object.keys(pointers).length < 2) pinchStartDist = 0;
+    if(Object.keys(pointers).length === 0){
+      panning = false;
+      viewport.classList.remove("panning");
+      save();
+    }
+  }
+  viewport.addEventListener("pointerup", endPointer);
+  viewport.addEventListener("pointercancel", endPointer);
+
+  viewport.addEventListener("wheel", function(e){
+    e.preventDefault();
+    var rect = viewport.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var wx = (mx - state.view.x)/state.view.scale;
+    var wy = (my - state.view.y)/state.view.scale;
+    var factor = e.deltaY > 0 ? 0.9 : 1.1;
+    var newScale = clamp(state.view.scale * factor, 0.3, 2.5);
+    state.view.scale = newScale;
+    state.view.x = mx - wx*newScale;
+    state.view.y = my - wy*newScale;
+    applyTransform();
+    save();
+  }, {passive:false});
+
+  viewport.addEventListener("dblclick", function(e){
+    if(e.target.closest(".body-node") || selectMode) return;
+    var rect = viewport.getBoundingClientRect();
+    var wx = (e.clientX - rect.left - state.view.x)/state.view.scale;
+    var wy = (e.clientY - rect.top - state.view.y)/state.view.scale;
+    openModal(null, {x:wx, y:wy});
+  });
+
+  document.getElementById("zoomIn").onclick = function(){ zoomByButton(1.2); };
+  document.getElementById("zoomOut").onclick = function(){ zoomByButton(0.8); };
+  function zoomByButton(factor){
+    var rect = viewport.getBoundingClientRect();
+    var mx = rect.width/2, my = rect.height/2;
+    var wx = (mx - state.view.x)/state.view.scale;
+    var wy = (my - state.view.y)/state.view.scale;
+    var newScale = clamp(state.view.scale*factor, 0.3, 2.5);
+    state.view.scale = newScale;
+    state.view.x = mx - wx*newScale;
+    state.view.y = my - wy*newScale;
+    applyTransform();
+    save();
+  }
+
+  document.getElementById("search").addEventListener("input", function(){ renderAll(); });
+
+  // ---------- Node detail sheet ----------
+  var sheetOverlay = document.getElementById("sheet-overlay");
+  var sheet = document.getElementById("sheet");
+  var sheetNodeId = null;
+
+  function openSheet(nodeId){
+    var node = state.nodes.find(function(n){return n.id===nodeId;});
+    if(!node) return;
+    sheetNodeId = nodeId;
+    document.getElementById("sheetTitle").textContent = node.title;
+    document.getElementById("sheetUrl").textContent = node.url;
+    document.getElementById("sheetNote").textContent = node.note || "";
+    document.getElementById("sheetNote").style.display = node.note ? "block" : "none";
+    sheetOverlay.style.display = "block";
+    sheet.style.display = "block";
+  }
+  function closeSheet(){ sheetOverlay.style.display="none"; sheet.style.display="none"; sheetNodeId=null; }
+  sheetOverlay.onclick = closeSheet;
+  document.getElementById("sheetOpen").onclick = function(){
+    var node = state.nodes.find(function(n){return n.id===sheetNodeId;});
+    if(node) window.open(node.url, "_blank");
+  };
+  document.getElementById("sheetEdit").onclick = function(){ var id=sheetNodeId; closeSheet(); openModal(id); };
+  document.getElementById("sheetConnect").onclick = function(){
+    connectingFrom = sheetNodeId; closeSheet();
+    showBanner("연결할 천체를 탭하세요 · 빈 곳을 탭하면 취소");
+    renderNodes();
+  };
+  document.getElementById("sheetDelete").onclick = function(){
+    var id = sheetNodeId; closeSheet();
+    state.nodes = state.nodes.filter(function(n){return n.id!==id;});
+    state.edges = state.edges.filter(function(ed){return ed.from!==id && ed.to!==id;});
+    save(); renderAll(); toast("삭제했어요");
+  };
+
+  // ---------- Generic panel open/close ----------
+  function openPanel(ovId, sheetId){ document.getElementById(ovId).style.display = "block"; document.getElementById(sheetId).style.display = "block"; }
+  function closePanel(ovId, sheetId){ document.getElementById(ovId).style.display = "none"; document.getElementById(sheetId).style.display = "none"; }
+
+  // ---------- Share hub ----------
+  document.getElementById("shareHubBtn").onclick = function(){ openPanel("hubSheetOv","hubSheet"); };
+  document.getElementById("hubSheetOv").onclick = function(){ closePanel("hubSheetOv","hubSheet"); };
+  document.getElementById("hubCancel").onclick = function(){ closePanel("hubSheetOv","hubSheet"); };
+  document.getElementById("hubSendOption").onclick = function(){ closePanel("hubSheetOv","hubSheet"); enterSelectMode(); };
+  document.getElementById("hubReceiveOption").onclick = function(){ closePanel("hubSheetOv","hubSheet"); openImportSheet(); };
+
+  // ---------- Send (export) ----------
+  function buildCode(ids){
+    var idxMap = {};
+    var nodes = [];
+    ids.forEach(function(id, i){
+      idxMap[id] = i;
+      var n = state.nodes.find(function(x){return x.id===id;});
+      nodes.push({t:n.title, u:n.url, n:n.note||"", ty:n.type, c:n.color});
+    });
+    var edges = [];
+    state.edges.forEach(function(ed){
+      if(idxMap.hasOwnProperty(ed.from) && idxMap.hasOwnProperty(ed.to)){
+        edges.push([idxMap[ed.from], idxMap[ed.to]]);
+      }
+    });
+    var payload = {v:1, nodes:nodes, edges:edges};
+    return "LU1:" + toBase64(JSON.stringify(payload));
+  }
+
+  function openSendSheet(ids){
+    var code = buildCode(ids);
+    document.getElementById("sendOutput").value = code;
+    document.getElementById("sendSheetTitle").textContent = ids.length + "개의 별 보내기";
+    openPanel("sendSheetOv","sendSheet");
+  }
+  document.getElementById("sendSheetOv").onclick = function(){ closePanel("sendSheetOv","sendSheet"); exitSelectMode(); };
+  document.getElementById("sendDoneBtn").onclick = function(){ closePanel("sendSheetOv","sendSheet"); exitSelectMode(); };
+  document.getElementById("sendCopyBtn").onclick = function(){
+    var val = document.getElementById("sendOutput").value;
+    function fallbackSelect(){
+      var ta = document.getElementById("sendOutput");
+      ta.focus(); ta.select();
+      toast("코드를 선택했어요 — 복사해주세요");
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(val).then(function(){ toast("복사했어요"); }).catch(fallbackSelect);
+    } else { fallbackSelect(); }
+  };
+  document.getElementById("sendShareBtn").onclick = function(){
+    var val = document.getElementById("sendOutput").value;
+    if(navigator.share){
+      navigator.share({title:"링크 우주 - 별 보내기", text: val}).catch(function(){});
+    } else {
+      document.getElementById("sendCopyBtn").click();
+    }
+  };
+
+  // ---------- Receive (import) ----------
+  function parseCode(raw){
+    var code = raw.trim().replace(/\s+/g,"");
+    if(code.indexOf("LU1:") !== 0) throw new Error("bad format");
+    var json = fromBase64(code.slice(4));
+    var obj = JSON.parse(json);
+    if(!obj || obj.v!==1 || !Array.isArray(obj.nodes)) throw new Error("bad format");
+    return obj;
+  }
+
+  function openImportSheet(){
+    document.getElementById("importInput").value = "";
+    openPanel("importSheetOv","importSheet");
+  }
+  document.getElementById("importSheetOv").onclick = function(){ closePanel("importSheetOv","importSheet"); };
+  document.getElementById("importCancel").onclick = function(){ closePanel("importSheetOv","importSheet"); };
+  document.getElementById("importConfirm").onclick = function(){
+    var raw = document.getElementById("importInput").value;
+    if(!raw.trim()){ toast("코드를 붙여넣어주세요"); return; }
+    try{
+      var obj = parseCode(raw);
+      importPayload(obj);
+      closePanel("importSheetOv","importSheet");
+    }catch(e){
+      toast("코드를 확인해주세요");
+    }
+  };
+
+  function importPayload(obj){
+    var total = obj.nodes.length;
+    if(total === 0){ toast("받을 별이 없어요"); return; }
+    var rect = viewport.getBoundingClientRect();
+    var cx = (rect.width/2 - state.view.x)/state.view.scale;
+    var cy = (rect.height/2 - state.view.y)/state.view.scale;
+    var radius = clamp(60 + total*8, 80, 260);
+    var newIds = [];
+    obj.nodes.forEach(function(n, i){
+      var angle = (2*Math.PI*i/total) - Math.PI/2;
+      var jx = (Math.random()*24-12), jy = (Math.random()*24-12);
+      var x = clamp(cx + radius*Math.cos(angle) + jx, 40, WORLD_SIZE-40);
+      var y = clamp(cy + radius*Math.sin(angle) + jy, 40, WORLD_SIZE-40);
+      var id = uid();
+      newIds.push(id);
+      var validType = TYPES.some(function(t){return t.id===n.ty;}) ? n.ty : "star";
+      state.nodes.push({
+        id:id,
+        title: n.t || "제목 없음",
+        url: n.u || "https://example.com",
+        note: n.n || "",
+        type: validType,
+        color: n.c || typeOf(validType).defaultColor,
+        x:x, y:y
+      });
+    });
+    (obj.edges||[]).forEach(function(pair){
+      var a = newIds[pair[0]], b = newIds[pair[1]];
+      if(a && b) state.edges.push({id:uid(), from:a, to:b});
+    });
+    save();
+    renderAll();
+    toast("✦ " + total + "개의 별이 도착했어요");
+  }
+
+  // ---------- Add / Edit modal ----------
+  var modalOverlay = document.getElementById("modal-overlay");
+  var selectedType = "star";
+  var selectedColor = TYPES[0].defaultColor;
+  var pendingPos = null;
+
+  var typeRow = document.getElementById("typeRow");
+  TYPES.forEach(function(t){
+    var pill = document.createElement("div");
+    pill.className = "type-pill";
+    pill.appendChild(miniIcon(t.id, t.defaultColor));
+    var lbl = document.createElement("span"); lbl.textContent = t.label;
+    pill.appendChild(lbl);
+    pill.onclick = function(){
+      selectedType = t.id;
+      selectedColor = t.defaultColor;
+      renderTypeRow(); renderSwatchRow();
+    };
+    pill.dataset.type = t.id;
+    typeRow.appendChild(pill);
+  });
+  function renderTypeRow(){
+    typeRow.querySelectorAll(".type-pill").forEach(function(p){
+      p.classList.toggle("selected", p.dataset.type === selectedType);
+    });
+  }
+
+  var swatchRow = document.getElementById("swatchRow");
+  SWATCHES.forEach(function(c){
+    var sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.style.background = c;
+    sw.dataset.color = c;
+    sw.onclick = function(){ selectedColor = c; renderSwatchRow(); };
+    swatchRow.appendChild(sw);
+  });
+  function renderSwatchRow(){
+    swatchRow.querySelectorAll(".swatch").forEach(function(s){
+      s.classList.toggle("selected", s.dataset.color === selectedColor);
+    });
+  }
+
+  function openModal(nodeId, pos){
+    editingId = nodeId;
+    pendingPos = pos;
+    if(nodeId){
+      var node = state.nodes.find(function(n){return n.id===nodeId;});
+      document.getElementById("modalHeading").textContent = "천체 수정";
+      document.getElementById("f-title").value = node.title;
+      document.getElementById("f-url").value = node.url;
+      document.getElementById("f-note").value = node.note || "";
+      selectedType = node.type; selectedColor = node.color;
+    } else {
+      document.getElementById("modalHeading").textContent = "새 천체";
+      document.getElementById("f-title").value = "";
+      document.getElementById("f-url").value = "";
+      document.getElementById("f-note").value = "";
+      selectedType = "star"; selectedColor = TYPES[0].defaultColor;
+    }
+    renderTypeRow(); renderSwatchRow();
+    modalOverlay.style.display = "flex";
+  }
+  function closeModal(){ modalOverlay.style.display = "none"; }
+
+  document.getElementById("fab").onclick = function(){
+    var rect = viewport.getBoundingClientRect();
+    var wx = (rect.width/2 - state.view.x)/state.view.scale + (Math.random()*60-30);
+    var wy = (rect.height/2 - state.view.y)/state.view.scale + (Math.random()*60-30);
+    openModal(null, {x:wx, y:wy});
+  };
+  document.getElementById("modalCancel").onclick = closeModal;
+  modalOverlay.addEventListener("click", function(e){ if(e.target===modalOverlay) closeModal(); });
+
+  document.getElementById("modalSave").onclick = function(){
+    var title = document.getElementById("f-title").value.trim();
+    var url = document.getElementById("f-url").value.trim();
+    var note = document.getElementById("f-note").value.trim();
+    if(!title || !url){ toast("제목과 URL을 입력해주세요"); return; }
+    if(!/^https?:\/\//i.test(url)) url = "https://" + url;
+
+    if(editingId){
+      var node = state.nodes.find(function(n){return n.id===editingId;});
+      node.title=title; node.url=url; node.note=note; node.type=selectedType; node.color=selectedColor;
+    } else {
+      state.nodes.push({id:uid(), title:title, url:url, note:note, type:selectedType, color:selectedColor, x:pendingPos.x, y:pendingPos.y});
+    }
+    save(); renderAll(); closeModal();
+    toast(editingId ? "수정했어요" : "천체를 만들었어요");
+  };
+
+  // ---------- Reset ----------
+  document.getElementById("resetBtn").onclick = function(){
+    if(!confirm("모든 링크와 연결을 삭제할까요? 이 동작은 되돌릴 수 없어요.")) return;
+    state.nodes = []; state.edges = [];
+    activeFilterType = null;
+    save(); renderAll(); toast("초기화했어요");
+  };
+
+  // ---------- Decorative starfield ----------
+  (function buildStarfield(){
+    var field = document.getElementById("starfield");
+    var frag = document.createDocumentFragment();
+    for(var i=0;i<90;i++){
+      var s = document.createElement("div");
+      s.className = "bgstar" + (Math.random() < 0.3 ? " twinkle" : "");
+      var size = Math.random()*2 + 0.5;
+      s.style.width = size+"px"; s.style.height = size+"px";
+      s.style.left = (Math.random()*100)+"%";
+      s.style.top = (Math.random()*100)+"%";
+      s.style.opacity = (Math.random()*0.4+0.15).toFixed(2);
+      s.style.animationDelay = (Math.random()*5)+"s";
+      frag.appendChild(s);
+    }
+    field.appendChild(frag);
+  })();
+
+  load();
+})();
+</script>
+</body>
+</html>
