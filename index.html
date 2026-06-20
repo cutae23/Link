@@ -369,6 +369,31 @@
     dot.dataset.status = s;
   }
 
+  // ---------- Storage abstraction (window.storage → localStorage fallback) ----------
+  var storage = (function(){
+    // Claude Artifacts 환경이면 window.storage 사용, 아니면 localStorage 폴백
+    function isCloudStorage(){
+      return window.storage && typeof window.storage.get === "function";
+    }
+    return {
+      get: function(key){
+        if(isCloudStorage()) return window.storage.get(key, false);
+        return Promise.resolve((function(){
+          var v = null;
+          try{ v = localStorage.getItem("linkspace_" + key); }catch(e){}
+          return v !== null ? { value: v } : null;
+        })());
+      },
+      set: function(key, value){
+        if(isCloudStorage()) return window.storage.set(key, value, false);
+        return Promise.resolve((function(){
+          try{ localStorage.setItem("linkspace_" + key, value); return { value: value }; }
+          catch(e){ return null; }
+        })());
+      }
+    };
+  })();
+
   function noStorageFallback(){
     storageAvailable = false;
     setSync("error");
@@ -389,11 +414,22 @@
   }
 
   function load(){
+    // localStorage 사용 가능 여부 확인 후, window.storage 주입 대기
+    var hasLocalStorage = (function(){
+      try{ localStorage.setItem("_t","1"); localStorage.removeItem("_t"); return true; }
+      catch(e){ return false; }
+    })();
+
     if(!window.storage || typeof window.storage.get !== "function"){
-      // give it one short moment in case it's injected slightly after script start
       setTimeout(function(){
         if(!window.storage || typeof window.storage.get !== "function"){
-          noStorageFallback();
+          if(hasLocalStorage){
+            // localStorage 폴백으로 정상 진행
+            setSync("loading");
+            attemptGet(0);
+          } else {
+            noStorageFallback();
+          }
         } else {
           setSync("loading");
           attemptGet(0);
@@ -406,14 +442,11 @@
   }
 
   function attemptGet(retryCount){
-    window.storage.get("board", false).then(function(res){
+    storage.get("board").then(function(res){
       applyLoadedData(res);
       finishLoad();
       setSync("saved");
     }).catch(function(){
-      // A missing key always rejects too, so we can't tell "never saved"
-      // from "real error" — keep retries short so a brand-new board
-      // doesn't sit on a loading screen for seconds.
       if(retryCount < 1){
         setTimeout(function(){ attemptGet(retryCount+1); }, 350);
       } else {
@@ -450,7 +483,7 @@
   }
   function doSave(retryCount){
     if(!storageAvailable) return;
-    window.storage.set("board", JSON.stringify(state), false).then(function(){
+    storage.set("board", JSON.stringify(state)).then(function(){
       setSync("saved");
     }).catch(function(){
       if(retryCount < 2){
@@ -467,7 +500,7 @@
     if(!loaded){ toast("아직 불러오는 중이에요"); return; }
     clearTimeout(saveTimer);
     setSync("saving");
-    window.storage.set("board", JSON.stringify(state), false).then(function(){
+    storage.set("board", JSON.stringify(state)).then(function(){
       setSync("saved");
       toast("저장했어요 ✓");
     }).catch(function(){
