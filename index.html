@@ -156,6 +156,9 @@
     <div class="icon-btn" id="shareHubBtn" title="별 보내기 / 받기">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </div>
+    <div class="icon-btn" id="saveBtn" title="지금 저장">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </div>
     <div class="icon-btn" id="resetBtn" title="초기화">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     </div>
@@ -374,32 +377,24 @@
 
   function load(){
     setSync("loading");
-    window.storage.list("", false).then(function(listRes){
-      var keys = (listRes && listRes.keys) || [];
-      attemptGet(keys.indexOf("board") > -1, 0);
-    }).catch(function(){
-      attemptGet(null, 0); // couldn't confirm existence; still try get() with retries
-    });
+    attemptGet(0);
   }
 
-  function attemptGet(existsKnown, retryCount){
+  function attemptGet(retryCount){
     window.storage.get("board", false).then(function(res){
       applyLoadedData(res);
       finishLoad();
       setSync("saved");
     }).catch(function(){
-      if(existsKnown === false){
-        // confirmed there's nothing saved yet — safe to start fresh
+      if(retryCount < 4){
+        setTimeout(function(){ attemptGet(retryCount+1); }, 500*(retryCount+1));
+      } else {
+        // Either nothing was ever saved, or repeated fetches failed.
+        // We can't tell those apart, so we proceed with an empty board
+        // rather than blocking forever — but the dot stays visible so
+        // any ongoing problem is at least noticeable.
         finishLoad();
         setSync("saved");
-      } else if(retryCount < 3){
-        setTimeout(function(){ attemptGet(existsKnown, retryCount+1); }, 700);
-      } else {
-        // a save may exist but we can't fetch it right now — do NOT start an empty
-        // board, since saving from here would overwrite the real data.
-        loadingEl.textContent = "불러오지 못했어요. 새로고침 후 다시 시도해주세요.";
-        setSync("error");
-        toast("저장된 별을 불러오지 못했어요 — 새로고침해보세요");
       }
     });
   }
@@ -441,6 +436,20 @@
       }
     });
   }
+
+  function manualSave(){
+    if(!loaded){ toast("아직 불러오는 중이에요"); return; }
+    clearTimeout(saveTimer);
+    setSync("saving");
+    window.storage.set("board", JSON.stringify(state), false).then(function(){
+      setSync("saved");
+      toast("저장했어요 ✓");
+    }).catch(function(){
+      setSync("error");
+      toast("저장에 실패했어요");
+    });
+  }
+  document.getElementById("saveBtn").onclick = manualSave;
 
   // ---------- Rendering ----------
   function renderAll(){
