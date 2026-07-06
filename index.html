@@ -748,13 +748,13 @@
     var dragging=false, moved=false, startX,startY, origX,origY, pid=null, longPressTimer=null, dragEnabled=false;
 
     el.addEventListener("pointerdown", function(e){
-      e.stopPropagation();
       if(selectMode){
+        e.stopPropagation();
         pid = e.pointerId; startX = e.clientX; startY = e.clientY;
         try{ el.setPointerCapture(pid); }catch(err){}
         return;
       }
-      if(connectingFrom){ return; }
+      if(connectingFrom){ e.stopPropagation(); return; }
       var node = state.nodes.find(function(n){return n.id===nodeId;});
       if(!node) return;
       dragging = false; moved = false; dragEnabled = false;
@@ -762,12 +762,17 @@
       origX = node.x; origY = node.y;
       pid = e.pointerId;
       try{ el.setPointerCapture(pid); }catch(err){}
-      // 꾹 눌러야만(길게 누르기) 그때부터 이동이 가능해진다. 그 전까지는 터치해서 움직여도 천체는 움직이지 않는다.
+      // 여기서는 stopPropagation()을 호출하지 않는다: 꾹 누르기가 완료되기 전까지는
+      // 이 터치가 뷰포트의 패닝/핀치줌으로도 그대로 전달되어야 하기 때문.
+      // 꾹 눌러야만(길게 누르기) 그때부터 천체 이동이 가능해진다.
       longPressTimer = setTimeout(function(){
         if(!moved){
           dragEnabled = true;
           dragging = true;
           el.classList.add("drag-ready");
+          // 이 시점부터는 화면 패닝이 아니라 이 천체만 이동해야 하므로, 뷰포트 쪽 패닝 상태를 취소한다.
+          if(pid !== null && (pid in pointers)) delete pointers[pid];
+          if(panning){ panning = false; viewport.classList.remove("panning"); }
         }
       }, 480);
     });
@@ -776,6 +781,7 @@
       if(selectMode || connectingFrom) return;
       if(!dragEnabled){
         // 아직 꾹 누르기가 완료되지 않음: 살짝 움직이면 탭/드래그 취소로만 처리하고, 천체는 움직이지 않는다.
+        // (이 움직임은 그대로 버블링되어 뷰포트의 패닝/핀치줌으로 처리된다.)
         if(Math.abs(e.clientX - startX) > 6 || Math.abs(e.clientY - startY) > 6){
           moved = true;
           clearTimeout(longPressTimer);
@@ -798,8 +804,8 @@
     });
 
     el.addEventListener("pointerup", function(e){
-      e.stopPropagation();
       if(selectMode){
+        e.stopPropagation();
         try{ el.releasePointerCapture(pid); }catch(err){}
         var ddx = Math.abs(e.clientX-startX), ddy = Math.abs(e.clientY-startY);
         if(ddx < 6 && ddy < 6) toggleSelect(nodeId);
@@ -808,8 +814,9 @@
       clearTimeout(longPressTimer);
       if(pid !== null){ try{ el.releasePointerCapture(pid); }catch(err){} }
       el.classList.remove("drag-ready");
-      if(connectingFrom){ handleConnectTap(nodeId); return; }
+      if(connectingFrom){ e.stopPropagation(); handleConnectTap(nodeId); return; }
       if(dragEnabled){
+        e.stopPropagation();
         dragging = false; dragEnabled = false;
         if(moved){
           save();
@@ -820,13 +827,14 @@
         }
         return;
       }
-      // 꾹 누르기가 완료되기 전에 손을 뗀 경우
+      // 꾹 누르기가 완료되기 전에 손을 뗀 경우 (패닝/핀치줌 중이었을 수 있으므로
+      // 이벤트는 그대로 버블링시켜 뷰포트 쪽에서 자체적으로 마무리하게 둔다.)
       dragging = false;
       if(!moved){
         var node = state.nodes.find(function(n){return n.id===nodeId;});
         if(node) window.open(node.url, "_blank");
       }
-      // moved && !dragEnabled: 꾹 누르기 전에 움직인 경우이므로 천체를 이동시키지 않는다.
+      // moved && !dragEnabled: 꾹 누르기 전에 움직인 경우이므로 천체를 이동시키지 않는다(패닝/줌으로 처리됨).
     });
 
     el.addEventListener("pointercancel", function(){
