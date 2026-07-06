@@ -57,6 +57,8 @@
   .body-node.match .body-visual{filter:drop-shadow(0 0 6px rgba(212,166,90,0.8));}
   .body-node.connecting-src .body-visual{filter:drop-shadow(0 0 8px var(--teal));}
   .body-node.selected-pick .body-visual{filter:drop-shadow(0 0 8px var(--teal));}
+  .body-node.drag-ready{opacity:0.9;}
+  .body-node.drag-ready .body-visual{filter:drop-shadow(0 0 10px var(--gold));transform:scale(1.08);}
   .pick-badge{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--teal);color:#06150f;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;}
 
   .star-shape{clip-path:polygon(50% 0%,61% 35%,100% 50%,61% 65%,50% 100%,39% 65%,0% 50%,39% 35%);}
@@ -190,7 +192,7 @@
         <button id="selectSendBtn" class="primary">전송</button>
       </div>
     </div>
-    <div id="help-hint">탭하면 링크가 열려요 · 꾹 누르면 수정 메뉴가 나와요</div>
+    <div id="help-hint">탭하면 링크가 열려요 · 꾹 누르고 있으면 그때부터 이동, 그대로 떼면 수정 메뉴가 나와요</div>
     <button id="fab" title="천체 추가">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </button>
@@ -743,7 +745,7 @@
 
   // ---------- Node interaction ----------
   function attachNodeEvents(el, nodeId){
-    var dragging=false, moved=false, startX,startY, origX,origY, pid=null, longPressTimer=null, longPressFired=false;
+    var dragging=false, moved=false, startX,startY, origX,origY, pid=null, longPressTimer=null, dragEnabled=false;
 
     el.addEventListener("pointerdown", function(e){
       e.stopPropagation();
@@ -755,27 +757,34 @@
       if(connectingFrom){ return; }
       var node = state.nodes.find(function(n){return n.id===nodeId;});
       if(!node) return;
-      dragging = true; moved = false; longPressFired = false;
+      dragging = false; moved = false; dragEnabled = false;
       startX = e.clientX; startY = e.clientY;
       origX = node.x; origY = node.y;
       pid = e.pointerId;
       try{ el.setPointerCapture(pid); }catch(err){}
+      // 꾹 눌러야만(길게 누르기) 그때부터 이동이 가능해진다. 그 전까지는 터치해서 움직여도 천체는 움직이지 않는다.
       longPressTimer = setTimeout(function(){
         if(!moved){
-          longPressFired = true;
-          dragging = false;
-          try{ el.releasePointerCapture(pid); }catch(err){}
-          openSheet(nodeId);
+          dragEnabled = true;
+          dragging = true;
+          el.classList.add("drag-ready");
         }
       }, 480);
     });
 
     el.addEventListener("pointermove", function(e){
-      if(selectMode || connectingFrom || !dragging) return;
+      if(selectMode || connectingFrom) return;
+      if(!dragEnabled){
+        // 아직 꾹 누르기가 완료되지 않음: 살짝 움직이면 탭/드래그 취소로만 처리하고, 천체는 움직이지 않는다.
+        if(Math.abs(e.clientX - startX) > 6 || Math.abs(e.clientY - startY) > 6){
+          moved = true;
+          clearTimeout(longPressTimer);
+        }
+        return;
+      }
       var dx = (e.clientX - startX) / state.view.scale;
       var dy = (e.clientY - startY) / state.view.scale;
-      if(Math.abs(dx) > 4 || Math.abs(dy) > 4){
-        if(!moved){ clearTimeout(longPressTimer); }
+      if(Math.abs(e.clientX - startX) > 4 || Math.abs(e.clientY - startY) > 4){
         moved = true;
       }
       if(!moved) return;
@@ -798,22 +807,32 @@
       }
       clearTimeout(longPressTimer);
       if(pid !== null){ try{ el.releasePointerCapture(pid); }catch(err){} }
+      el.classList.remove("drag-ready");
       if(connectingFrom){ handleConnectTap(nodeId); return; }
-      if(longPressFired){ longPressFired = false; dragging = false; return; }
-      if(dragging && !moved){
-        var node = state.nodes.find(function(n){return n.id===nodeId;});
-        dragging = false;
-        if(node) window.open(node.url, "_blank");
-      } else if(moved){
-        dragging = false;
-        save();
-        renderEdges();
+      if(dragEnabled){
+        dragging = false; dragEnabled = false;
+        if(moved){
+          save();
+          renderEdges();
+        } else {
+          // 꾹 누르기는 완료됐지만 움직이지 않고 뗌 -> 수정 메뉴
+          openSheet(nodeId);
+        }
+        return;
       }
+      // 꾹 누르기가 완료되기 전에 손을 뗀 경우
+      dragging = false;
+      if(!moved){
+        var node = state.nodes.find(function(n){return n.id===nodeId;});
+        if(node) window.open(node.url, "_blank");
+      }
+      // moved && !dragEnabled: 꾹 누르기 전에 움직인 경우이므로 천체를 이동시키지 않는다.
     });
 
     el.addEventListener("pointercancel", function(){
       clearTimeout(longPressTimer);
-      dragging = false;
+      dragging = false; dragEnabled = false;
+      el.classList.remove("drag-ready");
     });
   }
 
